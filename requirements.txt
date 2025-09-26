@@ -7,3 +7,5 @@ scikit-learn
 transformers
 sentencepiece
 torch
+sentence-transformers
+
