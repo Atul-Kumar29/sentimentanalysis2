@@ -2,26 +2,29 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 from wordcloud import WordCloud
-from transformers import pipeline
+from transformers import pipeline, AutoTokenizer
 from sentence_transformers import SentenceTransformer
 from sklearn.cluster import KMeans
 from sklearn.ensemble import IsolationForest
 
-# --- Model Initialization (similar to original script) ---
-# For Summarization (Replaced with an Indic model)
-summarizer = pipeline("summarization", model="ai4bharat/IndicBART")
+# --- Model Initialization ---
 
-# For Sentiment Analysis (New pipeline to replace TextBlob)
+# For Summarization (Applying the fix for the ValueError)
+# We explicitly load the tokenizer and disable the "fast" version to prevent the error.
+summarizer_tokenizer = AutoTokenizer.from_pretrained("ai4bharat/IndicBART", use_fast=False)
+summarizer = pipeline("summarization", model="ai4bharat/IndicBART", tokenizer=summarizer_tokenizer)
+
+# For Sentiment Analysis
 sentiment_pipeline = pipeline("sentiment-analysis", model="cardiffnlp/twitter-xlm-roberta-base-sentiment")
 
-# For Text-to-Number Conversion (New model to replace TfidfVectorizer)
+# For Text-to-Number Conversion
 embedding_model = SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')
 
 
 st.title("🇮🇳 Indic Feedback Analysis System")
-st.markdown("Analyzes feedback in various Indian languages, following the original script's logic.")
+st.markdown("Analyzes feedback in various Indian languages, with the tokenizer error fixed.")
 
-# --- Data Input (Identical to original script) ---
+# --- Data Input ---
 uploaded_file = st.file_uploader("Upload Feedback CSV (with a 'feedback' column)", type=["csv"])
 user_input = st.text_area("Or enter feedback comments here (one per line):")
 
@@ -33,19 +36,15 @@ elif user_input.strip() != "":
 else:
     df = None
 
-# --- Analysis Section (Follows original script's flow) ---
+# --- Analysis Section ---
 if df is not None:
     if 'feedback' not in df.columns:
         st.error("CSV must have a 'feedback' column or enter text manually!")
     else:
         st.success(f"Loaded {len(df)} feedback entries")
 
-        # --- Sentiment Analysis (Replaces TextBlob logic) ---
+        # --- Sentiment Analysis ---
         def get_sentiment(text):
-            """
-            This function replicates the original's apply() logic.
-            It runs the sentiment model on a single piece of text.
-            """
             result = sentiment_pipeline(str(text))[0]
             sentiment_map = {'Label_0': 'Negative', 'Label_1': 'Neutral', 'Label_2': 'Positive'}
             return sentiment_map.get(result['label'], 'Unknown')
@@ -53,27 +52,24 @@ if df is not None:
         df['sentiment_label'] = df['feedback'].apply(get_sentiment)
 
 
-        # --- Text Vectorization (Replaces TfidfVectorizer logic) ---
-        # Convert feedback text to a list of strings
+        # --- Text Vectorization ---
         feedback_docs = df['feedback'].astype(str).tolist()
-        # Create numerical embeddings (the new 'X')
         X = embedding_model.encode(feedback_docs)
 
 
-        # --- Clustering with KMeans (Identical to original logic) ---
+        # --- Clustering with KMeans ---
         kmeans = KMeans(n_clusters=3, random_state=42, n_init='auto')
         df['cluster'] = kmeans.fit_predict(X)
 
 
-        # --- Outlier Detection (Identical to original logic) ---
-        # Note: .toarray() is not needed as the encoder already outputs a numpy array
+        # --- Outlier Detection ---
         iso = IsolationForest(random_state=42, contamination=0.05)
         outliers = iso.fit_predict(X)
         df['outlier'] = outliers
         urgent_feedback = df[df['outlier'] == -1]['feedback']
 
 
-        # --- Summarization (Identical to original logic, but with the Indic model) ---
+        # --- Summarization ---
         try:
             summary_text = " ".join(df['feedback'].astype(str).tolist())[:2048]
             summary = summarizer(summary_text, max_length=120, min_length=40, do_sample=False)[0]['summary_text']
@@ -81,15 +77,14 @@ if df is not None:
             summary = "Summarisation model too slow or text too long in demo. Try smaller dataset."
 
 
-        # --- Display Results (Identical to original script's layout) ---
+        # --- Display Results ---
         st.subheader("1) Sentiment Distribution")
         st.bar_chart(df['sentiment_label'].value_counts())
 
         st.subheader("2) Word Cloud of Feedback")
-        # IMPORTANT: WordCloud needs a font that supports Indic characters to render them correctly.
-        # Otherwise, you will see square boxes. 'Nirmala.ttf' is common on Windows.
+        # NOTE: A font that supports Indic characters is required for this to render correctly.
         try:
-            font_path = 'Nirmala.ttf'
+            font_path = 'Nirmala.ttf' # Common font on Windows
             text = " ".join(df['feedback'].astype(str))
             wc = WordCloud(width=800, height=400, background_color="white", font_path=font_path).generate(text)
             fig, ax = plt.subplots(figsize=(10, 5))
