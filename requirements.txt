@@ -2,8 +2,8 @@ streamlit
 pandas
 matplotlib
 wordcloud
+textblob
 scikit-learn
 transformers
-sentence-transformers
-torch
 sentencepiece
+torch
